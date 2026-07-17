@@ -405,8 +405,10 @@ static CGFloat s_maximumVerticalOffset = DEFAULT_BASELINE_OFFSET_MAX;
 
 - (void)setTextKnockoutDistance:(CGFloat)distance
 {
-	mTextKnockoutDistance = distance;
-	[mTACache removeObjectForKey:kDKTextAdornmentMaskPathCacheKey];
+	@synchronized (self) {
+		mTextKnockoutDistance = distance;
+		[mTACache removeObjectForKey:kDKTextAdornmentMaskPathCacheKey];
+	}
 }
 
 @synthesize textKnockoutDistance = mTextKnockoutDistance;
@@ -856,7 +858,9 @@ static CGFloat s_maximumVerticalOffset = DEFAULT_BASELINE_OFFSET_MAX;
 {
 	// empties the cache, causing all information it contains to be recalculated as needed
 
-	[mTACache removeAllObjects];
+	@synchronized (self) {
+		[mTACache removeAllObjects];
+	}
 }
 
 - (void)masterStringChanged:(NSNotification*)note
@@ -1393,12 +1397,13 @@ static CGFloat s_maximumVerticalOffset = DEFAULT_BASELINE_OFFSET_MAX;
 	// check the cache for the last client of this renderer. If it's not the same one, any cached information can't be reliable
 	// so the cache must be invalidated. For TAs associated with text objects, the client object will invariably be the same one.
 
-	@try {
-		NSUInteger cs, ccs = [[mTACache objectForKey:kDKTextAdornmentMetadataChecksumCacheKey] integerValue];
+	@synchronized (self) {
+		@try {
+			NSUInteger cs, ccs = [[mTACache objectForKey:kDKTextAdornmentMetadataChecksumCacheKey] integerValue];
 		cs = [(id)object metadataChecksum];
 		if (cs != ccs) {
 			[self invalidateCache];
-			[mTACache setObject:@(ccs)
+			[mTACache setObject:@(cs)
 						 forKey:kDKTextAdornmentMetadataChecksumCacheKey];
 		}
 
@@ -1486,6 +1491,7 @@ static CGFloat s_maximumVerticalOffset = DEFAULT_BASELINE_OFFSET_MAX;
 		NSLog(@"Text Adornment (%@) threw an exception during rendering - PLEASE FIX - rasterizer will be disabled. Exception = %@", self, exception);
 		[self setEnabled:NO];
 		@throw;
+		}
 	}
 }
 
