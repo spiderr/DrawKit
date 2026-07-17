@@ -6,12 +6,12 @@
 
 #import "DKObjectDrawingLayer.h"
 #import "DKDrawablePath.h"
+#import "DKDrawableShape.h"
 #import "DKDrawing.h"
 #import "DKGeometryUtilities.h"
 #import "DKImageShape.h"
 #import "DKObjectDrawingLayer+Alignment.h"
 #import "DKPasteboardInfo.h"
-#import "DKRuntimeHelper.h"
 #import "DKSelectionPDFView.h"
 #import "DKShapeCluster.h"
 #import "DKStyle.h"
@@ -2354,16 +2354,12 @@ enum {
 	NSMutableArray* types = [[super pasteboardTypesForOperation:op] mutableCopy];
 
 	if ([self allowsObjectsToBeTargetedByDrags] && ((op & kDKReadableTypesForDrag) != 0)) {
-		// append all the types from the object classes we can accept:
-
-		NSArray* eligibleClasses = [DKRuntimeHelper allClassesOfKind:[DKDrawableObject class]];
+		// Append the known drawable object drag types without scanning the Objective-C runtime.
+		// Runtime class discovery is expensive enough to hang the Photos extension during view setup.
+		NSArray* eligibleClasses = @[[DKDrawablePath class], [DKDrawableShape class]];
 
 		for (Class class in eligibleClasses) {
-			NSArray* dragTypes;
-			if ([class respondsToSelector:@selector(pasteboardTypesForOperation:)])
-				dragTypes = [class pasteboardTypesForOperation:op];
-			else
-				dragTypes = nil;
+			NSArray* dragTypes = [class pasteboardTypesForOperation:op];
 
 			if (dragTypes != nil)
 				[types addUniqueObjectsFromArray:dragTypes];
