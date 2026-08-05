@@ -13,16 +13,27 @@ NSString* const kDKObservableKeyPath = @"kDKObservableKeyPath";
 
 #pragma mark Static Vars
 static NSMutableDictionary* sActionNameRegistry = nil;
-static dispatch_semaphore_t sActionNameRegistryLock; // To ensure thread safety
+static dispatch_semaphore_t sActionNameRegistryLock = NULL;
+static dispatch_once_t sActionNameRegistryLockOnce;
+
+/** PRESTOPHOTO-MACOS-2J: concurrent DKStyle / DKRastGroup init (parallel
+ createImageShape during loadDesignerPage) raced the lazy
+ `if (lock == nil) lock = dispatch_semaphore_create(1)` path. Threads overwrote
+ the semaphore pointer and disposed a lock still in use → EXC_BREAKPOINT in
+ `_dispatch_semaphore_dispose.cold`. Always create the lock once. */
+static void GCObservableEnsureActionNameRegistryLock(void)
+{
+	dispatch_once(&sActionNameRegistryLockOnce, ^{
+		sActionNameRegistryLock = dispatch_semaphore_create(1);
+	});
+}
 
 #pragma mark -
 @implementation GCObservableObject
 #pragma mark As a GCObservableObject
 + (void)registerActionName:(NSString*)na forKeyPath:(NSString*)kp objClass:(Class)cl
 {
-	if (sActionNameRegistryLock == nil)
-		sActionNameRegistryLock = dispatch_semaphore_create(1);
-	
+	GCObservableEnsureActionNameRegistryLock();
 	dispatch_semaphore_wait(sActionNameRegistryLock, DISPATCH_TIME_FOREVER);
 
 	if (sActionNameRegistry == nil)
@@ -39,12 +50,13 @@ static dispatch_semaphore_t sActionNameRegistryLock; // To ensure thread safety
 
 	[sd setObject:na
 		   forKey:kp];
-	
+
 	dispatch_semaphore_signal(sActionNameRegistryLock);
 }
 
 + (NSString*)actionNameForKeyPath:(NSString*)kp objClass:(Class)cl
 {
+	GCObservableEnsureActionNameRegistryLock();
 	dispatch_semaphore_wait(sActionNameRegistryLock, DISPATCH_TIME_FOREVER);
 
 	NSDictionary* sd = [sActionNameRegistry objectForKey:NSStringFromClass(cl)];
@@ -242,9 +254,9 @@ static dispatch_semaphore_t sActionNameRegistryLock; // To ensure thread safety
 	self = [super init];
 	if (self != nil) {
 		NSAssert(m_oldArrayValues == nil, @"Expected init to zero"); // created when needed
-		[self registerActionNames];
-	}
-	if (self != nil) {
+		// Once only — previously registered twice (duplicate if blocks), which
+		// doubled concurrent pressure on the action-name registry lock during
+		// parallel style construction (PRESTOPHOTO-MACOS-2J path).
 		[self registerActionNames];
 	}
 	return self;
