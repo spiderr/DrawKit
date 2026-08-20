@@ -6,7 +6,6 @@
 
 #import "DKDrawing+Export.h"
 #import "DKLayer+Metadata.h"
-#import "DKSelectionPDFView.h"
 #import "LogEvent.h"
 
 NSString* const kDKExportPropertiesResolution = @"kDKExportPropertiesResolution";
@@ -142,17 +141,6 @@ NSString* const kDKExportedImageRelativeScale = @"kDKExportedImageRelativeScale"
 - (CGImageRef)CGImageWithResolution:(NSInteger)dpi hasAlpha:(BOOL)hasAlpha relativeScale:(CGFloat)relScale
 {
 	[self finalizePriorToSaving];
-	NSRect frame = NSZeroRect;
-	frame.size = [[self drawing] drawingSize];
-
-	DKLayerPDFView* pdfView = [[DKLayerPDFView alloc] initWithFrame:frame
-														  withLayer:self];
-	/* spiderr - this was removed as it precludes rasterizing on a background thread (which is essential for hi-dpi images).
-	             It's possible this will need to be re-added, though for now it appears the DKViewController is not needed when dumping the canvas to a CGImage
-	DKViewController* vc = [pdfView makeViewController];
-
-	[[self drawing] addController:vc];
-    */
 	NSAssert(relScale > 0, @"scale factor must be greater than zero");
 
 	// create a bitmap rep of the requisite size.
@@ -195,17 +183,22 @@ NSString* const kDKExportedImageRelativeScale = @"kDKExportedImageRelativeScale"
 	}
 
 	[flipTrans concat];
-	// draw the PDF rep into the bitmap rep.
 
-	[pdfView drawRect:destRect];
-	//[pdfView displayRectIgnoringOpacity:destRect inContext:context];
+	// Draw the model into the bitmap context. Do not instantiate DKLayerPDFView
+	// (an NSView): jpegData/CGImage run on Presto's background raster queues, and
+	// on macOS 26 AppKit marshals off-main NSView drawing onto the main thread
+	// (dispatch_async_and_wait). Print-DPI NSBezierPath fills then AppHang the
+	// Photos extension (PRESTOPHOTO-MACOS-BV). DKDrawing drawRect:inView: with a
+	// nil view is the same content path DKLayerPDFView used, without a view.
+	NSRect drawingRect = NSZeroRect;
+	drawingRect.size = [self drawingSize];
+	[self drawRect:drawingRect
+			inView:nil];
 
 	RESTORE_GRAPHICS_CONTEXT //[NSGraphicsContext restoreGraphicsState];
 		CGImageRef image
 		= CGBitmapContextCreateImage(bmCtx);
 	CGContextRelease(bmCtx);
-
-	pdfView = nil; // removes the controller
 
 	return (CGImageRef)CFAutorelease(image);
 }
