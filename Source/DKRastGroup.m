@@ -194,15 +194,22 @@ dispatch_time_t m_renderListLockTimeOutSeconds = 2.0; // infinite is DISPATCH_TI
 
 - (DKRasterizer*)rendererWithName:(NSString*)name
 {
-	dispatch_semaphore_wait(m_renderListLock, m_renderListLockTimeOutSeconds);
-	DKRasterizer* ret = nil;
-	for (DKRasterizer* rend in m_renderList) {
-		if ([[rend name] isEqualToString:name]) {
-			ret = rend;
-		}
-	}
+	if (![name isKindOfClass:[NSString class]])
+		return nil;
+
+	// m_renderListLockTimeOutSeconds is a bare 2.0 stored in dispatch_time_t
+	// (2 ns). Use a real 2s deadline like renderersOfClass:.
+	dispatch_time_t deadline = dispatch_time(DISPATCH_TIME_NOW, (int64_t)2 * NSEC_PER_SEC);
+	dispatch_semaphore_wait(m_renderListLock, deadline);
+	NSArray* list = [m_renderList copy];
 	dispatch_semaphore_signal(m_renderListLock);
-	return ret;
+
+	for (DKRasterizer* rend in list) {
+		id rendName = [rend name];
+		if ([rendName isKindOfClass:[NSString class]] && [rendName isEqualToString:name])
+			return rend;
+	}
+	return nil;
 }
 
 #pragma mark -

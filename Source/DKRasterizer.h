@@ -60,7 +60,7 @@ typedef NS_ENUM(NSInteger, DKClippingOption) {
  
  Named renderers can be referred to in scripts or bound to in the UI. The name is copied for safety.
  */
-@property (nonatomic, copy, nullable) NSString* name;
+@property (atomic, copy, nullable) NSString* name;
 
 /** @brief Get the name or classname of the renderer.
  
