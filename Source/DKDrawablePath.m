@@ -2223,6 +2223,15 @@ finish:
  @param evt the event this came from */
 - (void)mouseDownAtPoint:(NSPoint)mp inPart:(NSInteger)partcode event:(NSEvent*)evt
 {
+	// The creation loops below call [view mouseUp:], which runs
+	// DKObjectCreationTool -finishCreation: before this method returns.
+	// A zero-length path fails objectIsValid and is dropped there (tool
+	// proto and the layer's pending object are the last owners). ARC does
+	// not keep self alive, so the message after the loop is objc_msgSend
+	// on a freed object (EXC_BAD_ACCESS at 0x10, PRESTOPHOTO-MACOS-MN).
+	__attribute__((objc_precise_lifetime)) DKDrawablePath* keepAlive = self;
+	(void)keepAlive;
+
 	[[self layer] setInfoWindowBackgroundColour:[[self class] infoWindowBackgroundColour]];
 
 	[self setTrackingMouse:YES];
